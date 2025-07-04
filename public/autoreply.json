@@ -1,0 +1,14 @@
+[
+  {
+    "trigger": "#halo",
+    "action": "Hai! Ada yang bisa kami bantu?"
+  },
+  {
+    "trigger": "#info",
+    "action": "Berikut info produk kami: https://example.com/produk"
+  },
+  {
+    "trigger": "#terima",
+    "action": "Sama-sama! Jika ada pertanyaan lain, silakan chat kembali."
+  }
+]

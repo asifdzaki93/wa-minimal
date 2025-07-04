@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: wa-gateway
+    env: node
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node index.js"
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 3000

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Scan QR WhatsApp</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #f0f0f0;
+    }
+    #qr {
+      width: 300px;
+      border: 10px solid white;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+  <img id="qr" src="" alt="QR Code" />
+  <script>
+    async function loadQR() {
+      const res = await fetch("/qr");
+      const data = await res.json();
+      if (data.qr) {
+        document.getElementById("qr").src = data.qr;
+      } else {
+        document.body.innerHTML = "<h2>QR tidak tersedia atau sudah discan.</h2>";
+      }
+    }
+    loadQR();
+    setInterval(loadQR, 5000); // auto-refresh QR
+  </script>
+</body>
+</html>
