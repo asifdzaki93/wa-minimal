@@ -74,6 +74,59 @@
         </form>
       </div>
     </div>
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">Jadwalkan Pengiriman Pesan</h5>
+        <form id="scheduleForm">
+          <div class="mb-3">
+            <label class="form-label">Nomor WhatsApp</label>
+            <input type="text" class="form-control" id="scheduleNumber" value="6287766305118" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Pesan</label>
+            <input type="text" class="form-control" id="scheduleMessage" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Waktu Kirim (YYYY-MM-DD HH:mm)</label>
+            <input type="datetime-local" class="form-control" id="scheduleTime" required>
+          </div>
+          <button type="submit" class="btn btn-warning w-100">Jadwalkan Pesan</button>
+        </form>
+      </div>
+    </div>
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">Cek Daftar Kontak & Grup</h5>
+        <button class="btn btn-info w-100 mb-2" id="getContactsBtn">Ambil Kontak</button>
+        <button class="btn btn-info w-100 mb-2" id="getGroupsBtn">Ambil Grup</button>
+        <div class="mb-2">
+          <label class="form-label">JID Grup untuk ambil anggota:</label>
+          <input type="text" class="form-control" id="groupJid" placeholder="contoh: 123456@g.us">
+          <button class="btn btn-secondary w-100 mt-2" id="getGroupMembersBtn">Ambil Kontak di Grup</button>
+        </div>
+        <div id="contactsResult" class="result mt-2"></div>
+      </div>
+    </div>
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">Upload Media Langsung</h5>
+        <form id="uploadForm" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label">Nomor WhatsApp</label>
+            <input type="text" class="form-control" id="uploadNumber" value="6287766305118" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">File Media</label>
+            <input type="file" class="form-control" id="uploadFile" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Caption (opsional)</label>
+            <input type="text" class="form-control" id="uploadCaption">
+          </div>
+          <button type="submit" class="btn btn-success w-100">Upload & Kirim</button>
+        </form>
+      </div>
+    </div>
     <div class="card">
       <div class="card-body">
         <h5 class="card-title">Hasil Response</h5>
@@ -168,6 +221,61 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ number, url, caption })
+      });
+      const data = await res.json();
+      resultDiv.textContent = JSON.stringify(data, null, 2);
+    };
+    // Jadwal kirim pesan
+    document.getElementById('scheduleForm').onsubmit = async function(e) {
+      e.preventDefault();
+      resultDiv.textContent = 'Menjadwalkan...';
+      // Implementasi endpoint /schedule-message di backend
+      const number = document.getElementById('scheduleNumber').value;
+      const message = document.getElementById('scheduleMessage').value;
+      const time = document.getElementById('scheduleTime').value;
+      const res = await fetch('/schedule-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number, message, time })
+      });
+      const data = await res.json();
+      resultDiv.textContent = JSON.stringify(data, null, 2);
+    };
+    // Cek kontak & grup
+    document.getElementById('getContactsBtn').onclick = async function() {
+      document.getElementById('contactsResult').textContent = 'Mengambil kontak...';
+      const res = await fetch('/contacts');
+      const data = await res.json();
+      document.getElementById('contactsResult').textContent = JSON.stringify(data, null, 2);
+    };
+    document.getElementById('getGroupsBtn').onclick = async function() {
+      document.getElementById('contactsResult').textContent = 'Mengambil grup...';
+      const res = await fetch('/groups');
+      const data = await res.json();
+      document.getElementById('contactsResult').textContent = JSON.stringify(data, null, 2);
+    };
+    document.getElementById('getGroupMembersBtn').onclick = async function() {
+      const jid = document.getElementById('groupJid').value;
+      if (!jid) return alert('Isi JID grup!');
+      document.getElementById('contactsResult').textContent = 'Mengambil anggota grup...';
+      const res = await fetch('/group-members?jid=' + encodeURIComponent(jid));
+      const data = await res.json();
+      document.getElementById('contactsResult').textContent = JSON.stringify(data, null, 2);
+    };
+    // Upload media langsung
+    document.getElementById('uploadForm').onsubmit = async function(e) {
+      e.preventDefault();
+      resultDiv.textContent = 'Mengupload...';
+      const number = document.getElementById('uploadNumber').value;
+      const caption = document.getElementById('uploadCaption').value;
+      const fileInput = document.getElementById('uploadFile');
+      const formData = new FormData();
+      formData.append('number', number);
+      formData.append('caption', caption);
+      formData.append('file', fileInput.files[0]);
+      const res = await fetch('/send-upload', {
+        method: 'POST',
+        body: formData
       });
       const data = await res.json();
       resultDiv.textContent = JSON.stringify(data, null, 2);

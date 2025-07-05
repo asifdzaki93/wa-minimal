@@ -13,6 +13,7 @@ import path from "path";
 import qrcode from "qrcode";
 import { fileURLToPath } from "url";
 import pino from "pino";
+import multer from "multer";
 
 // Fix __dirname untuk ES Module
 const __filename = fileURLToPath(import.meta.url);
@@ -105,7 +106,6 @@ const initWA = async () => {
 };
 
 await initWA();
-
 
 // ==============================
 // ✅ API ENDPOINTS
@@ -228,4 +228,107 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 WA Gateway aktif di http://localhost:${PORT}`);
+});
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Jadwal pengiriman pesan sederhana (in-memory, non-persisten)
+let scheduledMessages = [];
+setInterval(async () => {
+  const now = Date.now();
+  const toSend = scheduledMessages.filter(msg => msg.time <= now);
+  scheduledMessages = scheduledMessages.filter(msg => msg.time > now);
+  for (const msg of toSend) {
+    try {
+      if (!isConnected) {
+        await initWA();
+        await waitForConnection();
+      }
+      await sock.sendMessage(msg.jid, { text: msg.message });
+    } catch (e) {
+      console.error("Gagal kirim pesan terjadwal:", e);
+    }
+  }
+}, 5000);
+
+app.post("/schedule-message", async (req, res) => {
+  const { number, message, time } = req.body;
+  const jid = number?.replace(/\D/g, "") + "@s.whatsapp.net";
+  const sendTime = new Date(time).getTime();
+  if (!jid || !message || isNaN(sendTime)) return res.status(400).json({ error: "Data tidak valid" });
+  scheduledMessages.push({ jid, message, time: sendTime });
+  res.json({ status: "Pesan dijadwalkan", sendAt: new Date(sendTime).toISOString() });
+});
+
+// Ambil daftar kontak
+app.get("/contacts", async (req, res) => {
+  try {
+    if (!isConnected) {
+      await initWA();
+      await waitForConnection();
+    }
+    const contacts = Object.values(sock?.store?.contacts || {});
+    res.json(contacts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ambil daftar grup
+app.get("/groups", async (req, res) => {
+  try {
+    if (!isConnected) {
+      await initWA();
+      await waitForConnection();
+    }
+    const groups = Object.values(sock?.store?.chats || {}).filter(c => c.id && c.id.endsWith("@g.us"));
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ambil anggota grup
+app.get("/group-members", async (req, res) => {
+  const { jid } = req.query;
+  try {
+    if (!isConnected) {
+      await initWA();
+      await waitForConnection();
+    }
+    const metadata = await sock.groupMetadata(jid);
+    res.json(metadata.participants);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Upload media langsung
+app.post("/send-upload", upload.single("file"), async (req, res) => {
+  const { number, caption } = req.body;
+  const file = req.file;
+  const jid = number?.replace(/\D/g, "") + "@s.whatsapp.net";
+  if (!file) return res.status(400).json({ error: "File tidak ditemukan" });
+  const ext = (file.originalname || "").split(".").pop()?.toLowerCase() || "";
+  const imageExt = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
+  const videoExt = ["mp4", "3gp", "mkv", "mov", "avi", "webm"];
+  const audioExt = ["mp3", "ogg", "wav", "m4a", "aac", "opus"];
+  try {
+    if (!isConnected) {
+      await initWA();
+      await waitForConnection();
+    }
+    if (imageExt.includes(ext)) {
+      await sock.sendMessage(jid, { image: file.buffer, mimetype: file.mimetype, caption });
+    } else if (videoExt.includes(ext)) {
+      await sock.sendMessage(jid, { video: file.buffer, mimetype: file.mimetype, caption });
+    } else if (audioExt.includes(ext)) {
+      await sock.sendMessage(jid, { audio: file.buffer, mimetype: file.mimetype, caption });
+    } else {
+      await sock.sendMessage(jid, { document: file.buffer, mimetype: file.mimetype, fileName: file.originalname, caption });
+    }
+    res.json({ status: "Media berhasil dikirim" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
