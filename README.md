@@ -1,3 +1,5 @@
+[![Deploy on Replit](https://replit.com/badge/github/asifdzaki93/wa-minimal)](https://replit.com/github/asifdzaki93/wa-minimal)
+
 # WA Gateway API
 
 Sistem WhatsApp Gateway minimal berbasis Node.js + Express + Baileys
