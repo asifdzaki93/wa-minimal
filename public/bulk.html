@@ -137,7 +137,7 @@
                 <span id="connectionStatus" class="badge bg-secondary">Status: Checking...</span>
               </div>
               <div>
-                <button class="btn btn-outline-primary btn-sm" onclick="checkConnection()">
+                <button class="btn btn-outline-primary btn-sm" onclick="checkConnection()" id="refreshStatusBtn">
                   <i class="fas fa-sync-alt"></i> Refresh Status
                 </button>
                 <a href="test.html" class="btn btn-outline-info btn-sm ms-2">
@@ -229,9 +229,15 @@ Tim Support</textarea>
                 
                 <div id="groupSelect" class="mb-3" style="display: none;">
                   <label class="form-label">Pilih Grup</label>
-                  <select class="form-select" id="selectedGroup">
-                    <option value="">Loading groups...</option>
-                  </select>
+                  <div class="input-group">
+                    <select class="form-select" id="selectedGroup">
+                      <option value="">Loading groups...</option>
+                    </select>
+                    <button class="btn btn-outline-secondary" type="button" onclick="loadGroups()">
+                      <i class="fas fa-sync-alt"></i>
+                    </button>
+                  </div>
+                  <small class="text-muted">Klik refresh jika grup tidak muncul</small>
                 </div>
                 
                 <button class="btn btn-gradient" onclick="loadContacts()">
@@ -470,6 +476,9 @@ Tim Support</textarea>
       updateMessagePreview();
       setDefaultStartTime();
       
+      // Auto-refresh connection status every 5 seconds
+      setInterval(checkConnection, 5000);
+      
       // Event listeners
       document.getElementById('messageTemplate').addEventListener('input', updateMessagePreview);
       document.getElementById('contactSource').addEventListener('change', toggleContactInput);
@@ -478,21 +487,49 @@ Tim Support</textarea>
 
     // Connection check
     async function checkConnection() {
+      const statusBadge = document.getElementById('connectionStatus');
+      const refreshBtn = document.getElementById('refreshStatusBtn');
+      
       try {
+        console.log('🔄 Checking connection...');
+        statusBadge.textContent = 'Status: Checking...';
+        statusBadge.className = 'badge bg-secondary';
+        
+        // Add loading state to refresh button
+        if (refreshBtn) {
+          refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+          refreshBtn.disabled = true;
+        }
+        
         const response = await fetch('/status');
+        console.log('📡 Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
-        const statusBadge = document.getElementById('connectionStatus');
+        console.log('📊 Connection data:', data);
         
         if (data.connected) {
           statusBadge.textContent = 'Status: Connected';
           statusBadge.className = 'badge bg-success';
+          console.log('✅ WhatsApp connected');
         } else {
           statusBadge.textContent = 'Status: Disconnected';
           statusBadge.className = 'badge bg-danger';
+          console.log('❌ WhatsApp disconnected');
         }
       } catch (error) {
-        document.getElementById('connectionStatus').textContent = 'Status: Error';
-        document.getElementById('connectionStatus').className = 'badge bg-warning';
+        console.error('❌ Error checking connection:', error);
+        statusBadge.textContent = 'Status: Error';
+        statusBadge.className = 'badge bg-warning';
+      } finally {
+        // Reset refresh button
+        if (refreshBtn) {
+          refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Status';
+          refreshBtn.disabled = false;
+        }
       }
     }
 
@@ -546,19 +583,36 @@ Tim Support</textarea>
     // Load groups
     async function loadGroups() {
       try {
+        console.log('🔄 Loading groups...');
         const response = await fetch('/groups');
-        const groups = await response.json();
-        const select = document.getElementById('selectedGroup');
         
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const groups = await response.json();
+        console.log('📋 Groups loaded:', groups);
+        
+        const select = document.getElementById('selectedGroup');
         select.innerHTML = '<option value="">Pilih Grup</option>';
-        groups.forEach(group => {
-          const option = document.createElement('option');
-          option.value = group.id;
-          option.textContent = `${group.subject} (${group.size} anggota)`;
-          select.appendChild(option);
-        });
+        
+        if (groups && groups.length > 0) {
+          groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = `${group.subject || 'Unknown Group'} (${group.size || 0} anggota)`;
+            select.appendChild(option);
+          });
+          console.log(`✅ ${groups.length} groups loaded successfully`);
+        } else {
+          select.innerHTML = '<option value="">Tidak ada grup yang tersedia</option>';
+          console.log('⚠️ No groups available');
+        }
       } catch (error) {
-        console.error('Error loading groups:', error);
+        console.error('❌ Error loading groups:', error);
+        const select = document.getElementById('selectedGroup');
+        select.innerHTML = '<option value="">Error loading groups</option>';
+        showAlert('Error loading groups: ' + error.message, 'danger');
       }
     }
 
@@ -599,8 +653,8 @@ Tim Support</textarea>
             break;
             
           case 'contacts':
-            const response = await fetch('/contacts');
-            const contactData = await response.json();
+            const contactResponse = await fetch('/contacts');
+            const contactData = await contactResponse.json();
             contacts = contactData.map(contact => ({
               id: contact.id,
               number: contact.id.replace('@s.whatsapp.net', ''),
@@ -610,15 +664,28 @@ Tim Support</textarea>
             
           case 'group':
             const groupId = document.getElementById('selectedGroup').value;
-            if (groupId) {
-              const response = await fetch(`/group-members?jid=${encodeURIComponent(groupId)}`);
-              const members = await response.json();
-              contacts = members.map(member => ({
-                id: member.id,
-                number: member.id.replace('@s.whatsapp.net', ''),
-                name: member.name || member.id.replace('@s.whatsapp.net', '')
-              }));
+            if (!groupId) {
+              showAlert('Pilih grup terlebih dahulu!', 'warning');
+              return;
             }
+            
+            console.log('🔄 Loading group members for:', groupId);
+            const groupResponse = await fetch(`/group-members?jid=${encodeURIComponent(groupId)}`);
+            
+            if (!groupResponse.ok) {
+              throw new Error(`HTTP ${groupResponse.status}: ${groupResponse.statusText}`);
+            }
+            
+            const members = await groupResponse.json();
+            console.log('👥 Group members loaded:', members);
+            
+            contacts = members.map(member => ({
+              id: member.id,
+              number: member.id.replace('@s.whatsapp.net', ''),
+              name: member.name || member.id.replace('@s.whatsapp.net', '')
+            }));
+            
+            console.log(`✅ ${contacts.length} members loaded from group`);
             break;
         }
         

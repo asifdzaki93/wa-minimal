@@ -43,15 +43,9 @@ const setCachedMedia = (url, data) => {
 };
 
 // Dummy logger untuk Baileys (menghindari error logger.trace)
-const dummyLogger = {
-  trace: () => {},
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  fatal: () => {},
-  child: () => dummyLogger
-};
+const dummyLogger = pino({
+  level: 'silent'
+});
 
 // Init express
 const app = express();
@@ -183,16 +177,33 @@ const initWA = async () => {
       qrString = null;
       console.log("✅ Connected to WhatsApp");
       
-      // Tunggu sebentar lalu simpan kontak awal
-      setTimeout(async () => {
-        if (sock.contacts) {
+      // Tunggu dan coba beberapa kali untuk mendapatkan kontak
+      let retryCount = 0;
+      const maxRetries = 10;
+      const retryInterval = 2000; // 2 detik
+      
+      const tryLoadContacts = async () => {
+        if (sock.contacts && Object.keys(sock.contacts).length > 0) {
           console.log(`🔍 Kontak tersedia setelah koneksi: ${Object.keys(sock.contacts).length} kontak`);
           contacts = await saveContacts(sock.contacts);
           console.log(`📇 Kontak awal dimuat: ${contacts.length} kontak`);
+          return true;
         } else {
-          console.log(`⚠️ sock.contacts tidak tersedia setelah koneksi`);
+          retryCount++;
+          console.log(`⚠️ Mencoba mendapatkan kontak (${retryCount}/${maxRetries})...`);
+          
+          if (retryCount < maxRetries) {
+            setTimeout(tryLoadContacts, retryInterval);
+          } else {
+            console.log(`⚠️ Gagal mendapatkan kontak setelah ${maxRetries} percobaan`);
+            // Muat dari file cache jika ada
+            contacts = loadContacts();
+          }
         }
-      }, 3000); // Tunggu lebih lama
+      };
+      
+      // Mulai mencoba setelah 3 detik
+      setTimeout(tryLoadContacts, 3000);
     } else if (connection === "close") {
       const shouldReconnect =
         lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -238,26 +249,106 @@ app.get("/qr", async (req, res) => {
 
 // Cek status koneksi
 app.get("/status", (req, res) => {
-  res.json({ connected: isConnected });
+  res.json({ 
+    connected: isConnected,
+    sockExists: !!sock,
+    contactsCount: contacts.length,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Logout WhatsApp
 app.get("/logout", async (req, res) => {
   try {
-    if (sock) {
-      await sock.logout();
-      isConnected = false;
-      contacts = [];
-      // Hapus file kontak cache
-      if (fs.existsSync(CONTACT_FILE)) {
+    if (sock && isConnected) {
+      try {
+        await sock.logout();
+        console.log("🔌 Logout berhasil");
+      } catch (logoutErr) {
+        // Jika logout gagal karena koneksi sudah tertutup, anggap berhasil
+        if (logoutErr.message === "Connection Closed" || logoutErr.output?.statusCode === 428) {
+          console.log("🔌 Koneksi sudah tertutup, logout dianggap berhasil");
+        } else {
+          throw logoutErr; // Re-throw error lain
+        }
+      }
+    } else {
+      console.log("🔌 Tidak ada koneksi aktif untuk logout");
+    }
+    
+    // Reset state
+    isConnected = false;
+    contacts = [];
+    sock = null;
+    
+    // Hapus file kontak cache
+    if (fs.existsSync(CONTACT_FILE)) {
+      try {
         fs.unlinkSync(CONTACT_FILE);
         console.log("🗑️ File kontak cache dihapus");
+      } catch (fileErr) {
+        console.log("⚠️ Gagal hapus file cache:", fileErr.message);
       }
-      console.log("🔌 Logout berhasil");
     }
+    
+    // Hapus folder auth_info untuk logout total
+    try {
+      if (fs.existsSync("./auth_info")) {
+        fs.rmSync("./auth_info", { recursive: true, force: true });
+        console.log("🗑️ Folder auth_info dihapus");
+      }
+    } catch (authErr) {
+      console.log("⚠️ Gagal hapus auth_info:", authErr.message);
+    }
+    
     res.json({ status: "Logout berhasil" });
   } catch (err) {
     console.error("❌ Error logout:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Force logout (reset total)
+app.get("/logout/force", async (req, res) => {
+  try {
+    console.log("🔄 Force logout - reset total...");
+    
+    // Reset state tanpa mencoba logout dari server
+    isConnected = false;
+    contacts = [];
+    sock = null;
+    
+    // Hapus file kontak cache
+    if (fs.existsSync(CONTACT_FILE)) {
+      try {
+        fs.unlinkSync(CONTACT_FILE);
+        console.log("🗑️ File kontak cache dihapus");
+      } catch (fileErr) {
+        console.log("⚠️ Gagal hapus file cache:", fileErr.message);
+      }
+    }
+    
+    // Hapus folder auth_info untuk logout total
+    try {
+      if (fs.existsSync("./auth_info")) {
+        fs.rmSync("./auth_info", { recursive: true, force: true });
+        console.log("🗑️ Folder auth_info dihapus");
+      }
+    } catch (authErr) {
+      console.log("⚠️ Gagal hapus auth_info:", authErr.message);
+    }
+    
+    // Clear media cache
+    mediaCache.clear();
+    console.log("🗑️ Media cache dibersihkan");
+    
+    // Clear scheduled messages
+    scheduledMessages = [];
+    console.log("🗑️ Scheduled messages dibersihkan");
+    
+    res.json({ status: "Force logout berhasil - semua data direset" });
+  } catch (err) {
+    console.error("❌ Error force logout:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -279,15 +370,28 @@ app.post("/send-text", async (req, res) => {
   const jid = number?.replace(/\D/g, "") + "@s.whatsapp.net";
 
   try {
-    if (!isConnected) {
+    if (!isConnected || !sock) {
       await initWA();
       const ok = await waitForConnection();
       if (!ok) return res.status(503).json({ error: "WhatsApp belum terhubung, coba lagi nanti." });
     }
+    
+    if (!sock) {
+      return res.status(503).json({ error: "Socket WhatsApp tidak tersedia" });
+    }
+    
     await sock.sendMessage(jid, { text: message });
     res.json({ status: "Pesan berhasil dikirim" });
   } catch (err) {
     console.error("❌ Error kirim teks:", err);
+    
+    // Handle specific connection errors
+    if (err.message === "Connection Closed" || err.output?.statusCode === 428) {
+      isConnected = false;
+      sock = null;
+      return res.status(503).json({ error: "Koneksi WhatsApp terputus, silakan reconnect" });
+    }
+    
     res.status(500).json({ error: err.message });
   }
 });
@@ -467,22 +571,70 @@ app.get("/contacts", async (req, res) => {
   try {
     // Coba ambil dari memory dulu
     if (contacts.length > 0) {
+      console.log(`📱 Mengembalikan ${contacts.length} kontak dari memory`);
       return res.json(contacts);
     }
     
     // Jika kosong, coba ambil dari sock.contacts
-    if (isConnected && sock.contacts) {
-      contacts = saveContacts(sock.contacts);
+    if (isConnected && sock.contacts && Object.keys(sock.contacts).length > 0) {
+      console.log(`📱 Mengambil kontak dari sock.contacts: ${Object.keys(sock.contacts).length} kontak`);
+      contacts = await saveContacts(sock.contacts);
       return res.json(contacts);
     }
     
     // Jika masih kosong, coba muat dari file
     contacts = loadContacts();
     if (contacts.length > 0) {
+      console.log(`📱 Mengembalikan ${contacts.length} kontak dari file cache`);
       return res.json(contacts);
     }
     
+    // Jika semua kosong, coba ambil dari grup sebagai fallback
+    if (isConnected) {
+      console.log(`📱 Mencoba ambil kontak dari grup sebagai fallback...`);
+      try {
+        const groupsObj = await sock.groupFetchAllParticipating();
+        const allParticipants = [];
+        
+        for (const [groupId, group] of Object.entries(groupsObj || {})) {
+          try {
+            const metadata = await sock.groupMetadata(groupId);
+            if (metadata.participants && Array.isArray(metadata.participants)) {
+              allParticipants.push(...metadata.participants);
+            }
+          } catch (err) {
+            // Skip grup yang error
+          }
+        }
+        
+        const uniqueContacts = [];
+        const seenIds = new Set();
+        
+        for (const participant of allParticipants) {
+          if (participant.id && !seenIds.has(participant.id)) {
+            seenIds.add(participant.id);
+            const phoneNumber = participant.id.replace('@s.whatsapp.net', '');
+            uniqueContacts.push({
+              id: participant.id,
+              name: phoneNumber,
+              status: 'From Group'
+            });
+          }
+        }
+        
+        if (uniqueContacts.length > 0) {
+          contacts = uniqueContacts;
+          await saveContacts(uniqueContacts);
+          console.log(`📱 Mengembalikan ${contacts.length} kontak dari grup`);
+          return res.json(contacts);
+        }
+      } catch (err) {
+        console.log(`⚠️ Gagal ambil kontak dari grup:`, err.message);
+      }
+    }
+    
     // Jika semua kosong, kembalikan array kosong
+    console.log(`📱 Tidak ada kontak tersedia`);
     res.json([]);
   } catch (err) {
     console.error("[ERROR] /contacts:", err);
@@ -571,6 +723,20 @@ app.post("/contacts/refresh", async (req, res) => {
     console.error("[ERROR] /contacts/refresh:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Cek status kontak
+app.get("/contacts/status", (req, res) => {
+  const status = {
+    isConnected,
+    contactsInMemory: contacts.length,
+    contactsInFile: loadContacts().length,
+    sockContactsAvailable: isConnected && sock.contacts ? Object.keys(sock.contacts).length : 0,
+    lastUpdate: new Date().toISOString()
+  };
+  
+  console.log(`📊 Status kontak:`, status);
+  res.json(status);
 });
 
 // Ambil daftar grup
