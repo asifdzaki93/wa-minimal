@@ -1,0 +1,6 @@
+{
+  "ignore": [
+    "auth_info/*",
+    "public/wa-logs.txt"
+  ]
+}

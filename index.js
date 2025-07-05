@@ -142,18 +142,28 @@ app.post("/send-media", async (req, res) => {
   const { number, url, caption } = req.body;
   const jid = number?.replace(/\D/g, "") + "@s.whatsapp.net";
 
+  // Daftar ekstensi
+  const imageExt = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
+  const videoExt = [".mp4", ".3gp", ".mkv", ".mov", ".avi", ".webm"];
+  const audioExt = [".mp3", ".ogg", ".wav", ".m4a", ".aac", ".opus"];
+
   try {
     const response = await fetch(url);
     const buffer = Buffer.from(await response.arrayBuffer());
-    const mimeType = response.headers.get("content-type") || mime.lookup(url);
-    const fileName = path.basename(url);
+    let mimeType = response.headers.get("content-type") || mime.lookup(url) || "";
+    const fileName = path.basename(url.split("?")[0]);
+    const ext = path.extname(fileName).toLowerCase();
 
-    await sock.sendMessage(jid, {
-      document: buffer,
-      mimetype: mimeType,
-      fileName,
-      caption,
-    });
+    // Deteksi prioritas: mime-type, lalu ekstensi
+    if ((mimeType.startsWith("image/") && ext !== ".svg") || imageExt.includes(ext)) {
+      await sock.sendMessage(jid, { image: buffer, mimetype: mimeType, caption });
+    } else if (mimeType.startsWith("video/") || videoExt.includes(ext)) {
+      await sock.sendMessage(jid, { video: buffer, mimetype: mimeType, caption });
+    } else if (mimeType.startsWith("audio/") || audioExt.includes(ext)) {
+      await sock.sendMessage(jid, { audio: buffer, mimetype: mimeType, caption });
+    } else {
+      await sock.sendMessage(jid, { document: buffer, mimetype: mimeType, fileName, caption });
+    }
 
     res.json({ status: "Media berhasil dikirim" });
   } catch (err) {
