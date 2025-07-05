@@ -217,6 +217,10 @@ app.get("/logout", async (req, res) => {
   }
 });
 
+// Redirect root ke test.html
+app.get('/', (req, res) => {
+  res.redirect('/test.html');
+});
 
 // ==============================
 // ▶️ START SERVER
