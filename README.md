@@ -1,4 +1,4 @@
-[![Deploy on Replit](https://replit.com/badge/github/asifdzaki93/wa-minimal)](https://replit.com/github/asifdzaki93/wa-minimal)
+[![Deploy on Replit](https://replit.com/badge/github/asifdzaki93/wa-minimal)](https://replit.com/import/github/asifdzaki93/wa-minimal)
 
 # WA Gateway API
 
