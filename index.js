@@ -154,27 +154,39 @@ app.post("/send-text", async (req, res) => {
 });
 
 // Kirim media dari URL
-app.post("/send-media", async (req, res) => {
-  const { number, url, caption } = req.body;
-  const jid = number?.replace(/\D/g, "") + "@s.whatsapp.net";
-
-  // Daftar ekstensi
-  const imageExt = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
-  const videoExt = [".mp4", ".3gp", ".mkv", ".mov", ".avi", ".webm"];
-  const audioExt = [".mp3", ".ogg", ".wav", ".m4a", ".aac", ".opus"];
-
+app.post("/send-media", upload.single("file"), async (req, res) => {
   try {
+    const number = req.body.number;
+    const caption = req.body.caption;
+    const jid = number?.replace(/\D/g, "") + "@s.whatsapp.net";
+    let buffer, mimeType, fileName, ext;
+    // Daftar ekstensi
+    const imageExt = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
+    const videoExt = [".mp4", ".3gp", ".mkv", ".mov", ".avi", ".webm"];
+    const audioExt = [".mp3", ".ogg", ".wav", ".m4a", ".aac", ".opus"];
+
+    if (req.file) {
+      // Upload file
+      buffer = req.file.buffer;
+      mimeType = req.file.mimetype;
+      fileName = req.file.originalname;
+      ext = (fileName || "").split(".").pop()?.toLowerCase() || "";
+      ext = "." + ext;
+    } else if (req.body.url) {
+      // Download dari URL
+      const response = await fetch(req.body.url);
+      buffer = Buffer.from(await response.arrayBuffer());
+      mimeType = response.headers.get("content-type") || mime.lookup(req.body.url) || "";
+      fileName = path.basename(req.body.url.split("?")[0]);
+      ext = path.extname(fileName).toLowerCase();
+    } else {
+      return res.status(400).json({ error: "File upload atau url harus diisi" });
+    }
+
     if (!isConnected) {
       await initWA();
-      const ok = await waitForConnection();
-      if (!ok) return res.status(503).json({ error: "WhatsApp belum terhubung, coba lagi nanti." });
+      await waitForConnection();
     }
-    const response = await fetch(url);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    let mimeType = response.headers.get("content-type") || mime.lookup(url) || "";
-    const fileName = path.basename(url.split("?")[0]);
-    const ext = path.extname(fileName).toLowerCase();
-
     // Deteksi prioritas: mime-type, lalu ekstensi
     if ((mimeType.startsWith("image/") && ext !== ".svg") || imageExt.includes(ext)) {
       await sock.sendMessage(jid, { image: buffer, mimetype: mimeType, caption });
@@ -185,7 +197,6 @@ app.post("/send-media", async (req, res) => {
     } else {
       await sock.sendMessage(jid, { document: buffer, mimetype: mimeType, fileName, caption });
     }
-
     res.json({ status: "Media berhasil dikirim" });
   } catch (err) {
     console.error("❌ Error kirim media:", err);
@@ -260,6 +271,11 @@ app.post("/schedule-message", async (req, res) => {
   res.json({ status: "Pesan dijadwalkan", sendAt: new Date(sendTime).toISOString() });
 });
 
+// Monitoring antrian pesan terjadwal
+app.get('/scheduled-messages', (req, res) => {
+  res.json(scheduledMessages);
+});
+
 // Ambil daftar kontak
 app.get("/contacts", async (req, res) => {
   try {
@@ -328,6 +344,55 @@ app.post("/send-upload", upload.single("file"), async (req, res) => {
       await sock.sendMessage(jid, { document: file.buffer, mimetype: file.mimetype, fileName: file.originalname, caption });
     }
     res.json({ status: "Media berhasil dikirim" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export kontak
+app.get('/export/contacts', async (req, res) => {
+  try {
+    if (!isConnected) {
+      await initWA();
+      await waitForConnection();
+    }
+    const contacts = Object.values(sock?.store?.contacts || {});
+    res.setHeader('Content-Disposition', 'attachment; filename="contacts.json"');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(contacts, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export grup
+app.get('/export/groups', async (req, res) => {
+  try {
+    if (!isConnected) {
+      await initWA();
+      await waitForConnection();
+    }
+    const groups = Object.values(sock?.store?.chats || {}).filter(c => c.id && c.id.endsWith("@g.us"));
+    res.setHeader('Content-Disposition', 'attachment; filename="groups.json"');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(groups, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export member grup
+app.get('/export/group-members', async (req, res) => {
+  const { jid } = req.query;
+  try {
+    if (!isConnected) {
+      await initWA();
+      await waitForConnection();
+    }
+    const metadata = await sock.groupMetadata(jid);
+    res.setHeader('Content-Disposition', `attachment; filename="group-members-${jid}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(metadata.participants, null, 2));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

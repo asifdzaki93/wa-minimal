@@ -56,15 +56,19 @@
     </div>
     <div class="card mb-4">
       <div class="card-body">
-        <h5 class="card-title">Kirim Media (URL)</h5>
-        <form id="mediaForm">
+        <h5 class="card-title">Kirim Media (URL atau Upload)</h5>
+        <form id="mediaForm" enctype="multipart/form-data">
           <div class="mb-3">
             <label class="form-label">Nomor WhatsApp (format internasional)</label>
-            <input type="text" class="form-control" id="mediaNumber" required placeholder="6281234567890" value="6287766305118">
+            <input type="text" class="form-control" id="mediaNumber" value="6287766305118" required placeholder="6281234567890">
           </div>
           <div class="mb-3">
-            <label class="form-label">URL File Media</label>
-            <input type="text" class="form-control" id="mediaUrl" required placeholder="https://example.com/file.pdf">
+            <label class="form-label">URL File Media (opsional)</label>
+            <input type="text" class="form-control" id="mediaUrl" placeholder="https://example.com/file.pdf">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Atau Upload File Media (opsional)</label>
+            <input type="file" class="form-control" id="mediaFile">
           </div>
           <div class="mb-3">
             <label class="form-label">Caption (opsional)</label>
@@ -109,22 +113,13 @@
     </div>
     <div class="card mb-4">
       <div class="card-body">
-        <h5 class="card-title">Upload Media Langsung</h5>
-        <form id="uploadForm" enctype="multipart/form-data">
-          <div class="mb-3">
-            <label class="form-label">Nomor WhatsApp</label>
-            <input type="text" class="form-control" id="uploadNumber" value="6287766305118" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">File Media</label>
-            <input type="file" class="form-control" id="uploadFile" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Caption (opsional)</label>
-            <input type="text" class="form-control" id="uploadCaption">
-          </div>
-          <button type="submit" class="btn btn-success w-100">Upload & Kirim</button>
-        </form>
+        <h5 class="card-title">Export Kontak, Grup, dan Member Grup</h5>
+        <button class="btn btn-outline-primary w-100 mb-2" onclick="window.open('/export/contacts','_blank')">Download Kontak (JSON)</button>
+        <button class="btn btn-outline-primary w-100 mb-2" onclick="window.open('/export/groups','_blank')">Download Grup (JSON)</button>
+        <div class="input-group mb-2">
+          <input type="text" class="form-control" id="exportGroupJid" placeholder="JID Grup, contoh: 123456@g.us">
+          <button class="btn btn-outline-primary" id="exportGroupMembersBtn" type="button">Download Member Grup</button>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -217,10 +212,21 @@
       const number = document.getElementById('mediaNumber').value;
       const url = document.getElementById('mediaUrl').value;
       const caption = document.getElementById('mediaCaption').value;
+      const fileInput = document.getElementById('mediaFile');
+      const formData = new FormData();
+      formData.append('number', number);
+      formData.append('caption', caption);
+      if (fileInput.files.length > 0) {
+        formData.append('file', fileInput.files[0]);
+      } else if (url) {
+        formData.append('url', url);
+      } else {
+        resultDiv.textContent = 'Isi URL atau upload file.';
+        return;
+      }
       const res = await fetch('/send-media', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ number, url, caption })
+        body: formData
       });
       const data = await res.json();
       resultDiv.textContent = JSON.stringify(data, null, 2);
@@ -262,23 +268,10 @@
       const data = await res.json();
       document.getElementById('contactsResult').textContent = JSON.stringify(data, null, 2);
     };
-    // Upload media langsung
-    document.getElementById('uploadForm').onsubmit = async function(e) {
-      e.preventDefault();
-      resultDiv.textContent = 'Mengupload...';
-      const number = document.getElementById('uploadNumber').value;
-      const caption = document.getElementById('uploadCaption').value;
-      const fileInput = document.getElementById('uploadFile');
-      const formData = new FormData();
-      formData.append('number', number);
-      formData.append('caption', caption);
-      formData.append('file', fileInput.files[0]);
-      const res = await fetch('/send-upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      resultDiv.textContent = JSON.stringify(data, null, 2);
+    document.getElementById('exportGroupMembersBtn').onclick = function() {
+      const jid = document.getElementById('exportGroupJid').value;
+      if (!jid) return alert('Isi JID grup!');
+      window.open('/export/group-members?jid=' + encodeURIComponent(jid), '_blank');
     };
   </script>
 </body>
