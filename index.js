@@ -123,12 +123,28 @@ app.get("/status", (req, res) => {
   res.json({ connected: isConnected });
 });
 
+// Helper: tunggu sampai koneksi aktif
+async function waitForConnection(timeoutMs = 15000) {
+  const interval = 500;
+  let waited = 0;
+  while (!isConnected && waited < timeoutMs) {
+    await new Promise(r => setTimeout(r, interval));
+    waited += interval;
+  }
+  return isConnected;
+}
+
 // Kirim pesan teks
 app.post("/send-text", async (req, res) => {
   const { number, message } = req.body;
   const jid = number?.replace(/\D/g, "") + "@s.whatsapp.net";
 
   try {
+    if (!isConnected) {
+      await initWA();
+      const ok = await waitForConnection();
+      if (!ok) return res.status(503).json({ error: "WhatsApp belum terhubung, coba lagi nanti." });
+    }
     await sock.sendMessage(jid, { text: message });
     res.json({ status: "Pesan berhasil dikirim" });
   } catch (err) {
@@ -148,6 +164,11 @@ app.post("/send-media", async (req, res) => {
   const audioExt = [".mp3", ".ogg", ".wav", ".m4a", ".aac", ".opus"];
 
   try {
+    if (!isConnected) {
+      await initWA();
+      const ok = await waitForConnection();
+      if (!ok) return res.status(503).json({ error: "WhatsApp belum terhubung, coba lagi nanti." });
+    }
     const response = await fetch(url);
     const buffer = Buffer.from(await response.arrayBuffer());
     let mimeType = response.headers.get("content-type") || mime.lookup(url) || "";
