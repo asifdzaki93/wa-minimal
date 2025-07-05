@@ -102,11 +102,31 @@
       <div class="card-body">
         <h5 class="card-title">Cek Daftar Kontak & Grup</h5>
         <button class="btn btn-info w-100 mb-2" id="getContactsBtn">Ambil Kontak</button>
+        <button class="btn btn-warning w-100 mb-2" id="refreshContactsBtn">🔄 Refresh Kontak</button>
         <button class="btn btn-info w-100 mb-2" id="getGroupsBtn">Ambil Grup</button>
         <div class="mb-2">
           <label class="form-label">JID Grup untuk ambil anggota:</label>
-          <input type="text" class="form-control" id="groupJid" placeholder="contoh: 123456@g.us">
-          <button class="btn btn-secondary w-100 mt-2" id="getGroupMembersBtn">Ambil Kontak di Grup</button>
+          <div class="input-group mb-2">
+            <input type="text" class="form-control" id="groupJid" placeholder="contoh: 123456@g.us">
+            <button class="btn btn-outline-secondary" type="button" id="loadGroupsBtn">📋 Pilih Grup</button>
+          </div>
+          <button class="btn btn-secondary w-100" id="getGroupMembersBtn">Ambil Kontak di Grup</button>
+        </div>
+        <!-- Modal untuk pilih grup -->
+        <div class="modal fade" id="groupModal" tabindex="-1" aria-labelledby="groupModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="groupModalLabel">Pilih Grup</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <div id="groupList" class="list-group">
+                  <!-- Daftar grup akan dimuat di sini -->
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div id="contactsResult" class="result mt-2"></div>
       </div>
@@ -114,14 +134,63 @@
     <div class="card mb-4">
       <div class="card-body">
         <h5 class="card-title">Export Kontak, Grup, dan Member Grup</h5>
-        <button class="btn btn-outline-primary w-100 mb-2" onclick="window.open('/export/contacts','_blank')">Download Kontak (JSON)</button>
-        <button class="btn btn-outline-primary w-100 mb-2" onclick="window.open('/export/groups','_blank')">Download Grup (JSON)</button>
-        <div class="input-group mb-2">
-          <input type="text" class="form-control" id="exportGroupJid" placeholder="JID Grup, contoh: 123456@g.us">
-          <button class="btn btn-outline-primary" id="exportGroupMembersBtn" type="button">Download Member Grup</button>
+        <div class="row">
+          <div class="col-md-6">
+            <h6 class="text-primary">📄 Format JSON</h6>
+            <button class="btn btn-outline-primary w-100 mb-2" onclick="window.open('/export/contacts','_blank')">Download Kontak (JSON)</button>
+            <button class="btn btn-outline-primary w-100 mb-2" onclick="window.open('/export/groups','_blank')">Download Grup (JSON)</button>
+            <div class="input-group mb-2">
+              <input type="text" class="form-control" id="exportGroupJid" placeholder="JID Grup, contoh: 123456@g.us">
+              <button class="btn btn-outline-primary" id="exportGroupMembersBtn" type="button">Download Member Grup (JSON)</button>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-success">📊 Format Excel</h6>
+            <button class="btn btn-success w-100 mb-2" onclick="downloadExcel('/export/contacts/excel', 'contacts.xlsx')">Download Kontak (Excel)</button>
+            <button class="btn btn-success w-100 mb-2" onclick="downloadExcel('/export/groups/excel', 'groups.xlsx')">Download Grup (Excel)</button>
+            <div class="input-group mb-2">
+              <input type="text" class="form-control" id="exportGroupJidExcel" placeholder="JID Grup, contoh: 123456@g.us">
+              <button class="btn btn-success" id="exportGroupMembersExcelBtn" type="button">Download Member Grup (Excel)</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">📦 Cache Management</h5>
+        <div class="row">
+          <div class="col-md-6">
+            <button class="btn btn-info w-100 mb-2" id="checkCacheBtn">Cek Status Cache</button>
+            <button class="btn btn-warning w-100 mb-2" id="cleanupCacheBtn">Bersihkan Cache</button>
+          </div>
+          <div class="col-md-6">
+            <button class="btn btn-secondary w-100 mb-2" id="getScheduledMessagesBtn">Cek Pesan Terjadwal</button>
+            <button class="btn btn-outline-secondary w-100 mb-2" onclick="window.open('/test.html', '_blank')">Buka di Tab Baru</button>
+          </div>
+        </div>
+        <div id="cacheResult" class="result mt-2"></div>
+      </div>
+    </div>
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">👤 Profil Kontak</h5>
+        <div class="mb-3">
+          <label class="form-label">Nomor WhatsApp (format internasional)</label>
+          <div class="input-group">
+            <input type="text" class="form-control" id="profileNumber" placeholder="628123456789" value="6287766305118">
+            <button class="btn btn-primary" onclick="getProfile()">Cari Profil</button>
+            <button class="btn btn-success" onclick="updateProfile()">Update Profil</button>
+          </div>
+        </div>
+        <div class="mb-3">
+          <button class="btn btn-warning w-100" onclick="refreshAllProfiles()">🔄 Refresh Semua Profil Kontak</button>
+          <small class="text-muted">Memperbarui informasi profil semua kontak dan simpan ke cache</small>
+        </div>
+        <div id="profileResult" class="result mt-2"></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-body">
         <h5 class="card-title">Hasil Response</h5>
@@ -135,6 +204,7 @@
     const statusBadge = document.getElementById('statusBadge');
     const qrModal = new bootstrap.Modal(document.getElementById('qrModal'));
     const qrModalContent = document.getElementById('qrModalContent');
+    const groupModal = new bootstrap.Modal(document.getElementById('groupModal'));
 
     async function updateStatus() {
       try {
@@ -254,6 +324,13 @@
       const data = await res.json();
       document.getElementById('contactsResult').textContent = JSON.stringify(data, null, 2);
     };
+    
+    document.getElementById('refreshContactsBtn').onclick = async function() {
+      document.getElementById('contactsResult').textContent = 'Memperbarui kontak...';
+      const res = await fetch('/contacts/refresh', { method: 'POST' });
+      const data = await res.json();
+      document.getElementById('contactsResult').textContent = JSON.stringify(data, null, 2);
+    };
     document.getElementById('getGroupsBtn').onclick = async function() {
       document.getElementById('contactsResult').textContent = 'Mengambil grup...';
       const res = await fetch('/groups');
@@ -268,11 +345,272 @@
       const data = await res.json();
       document.getElementById('contactsResult').textContent = JSON.stringify(data, null, 2);
     };
+
+    // Load groups untuk pilihan
+    document.getElementById('loadGroupsBtn').onclick = async function() {
+      const groupList = document.getElementById('groupList');
+      groupList.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><div>Memuat daftar grup...</div></div>';
+      groupModal.show();
+      
+      try {
+        const res = await fetch('/groups');
+        const groups = await res.json();
+        
+        if (groups.length === 0) {
+          groupList.innerHTML = '<div class="alert alert-warning">Tidak ada grup yang tersedia.</div>';
+          return;
+        }
+        
+        groupList.innerHTML = '';
+        groups.forEach(group => {
+          const groupItem = document.createElement('div');
+          groupItem.className = 'list-group-item list-group-item-action';
+          groupItem.innerHTML = `
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1">${group.subject || 'Unknown Group'}</h6>
+              <small class="text-muted">${group.size || 0} anggota</small>
+            </div>
+            <p class="mb-1 text-muted small">${group.id}</p>
+            <button class="btn btn-sm btn-primary mt-2" onclick="selectGroup('${group.id}', '${group.subject || 'Unknown'}')">
+              Pilih Grup
+            </button>
+          `;
+          groupList.appendChild(groupItem);
+        });
+      } catch (error) {
+        groupList.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+      }
+    };
+
+    // Function untuk memilih grup
+    function selectGroup(jid, name) {
+      document.getElementById('groupJid').value = jid;
+      document.getElementById('exportGroupJid').value = jid;
+      document.getElementById('exportGroupJidExcel').value = jid;
+      groupModal.hide();
+      resultDiv.textContent = `✅ Grup dipilih: ${name} (${jid})`;
+    }
     document.getElementById('exportGroupMembersBtn').onclick = function() {
       const jid = document.getElementById('exportGroupJid').value;
       if (!jid) return alert('Isi JID grup!');
       window.open('/export/group-members?jid=' + encodeURIComponent(jid), '_blank');
     };
+
+    // Download Excel function
+    async function downloadExcel(endpoint, filename) {
+      try {
+        resultDiv.textContent = 'Mengunduh Excel...';
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        resultDiv.textContent = `✅ Excel berhasil diunduh: ${filename}`;
+      } catch (error) {
+        resultDiv.textContent = `❌ Error download Excel: ${error.message}`;
+      }
+    }
+
+    // Export group members Excel
+    document.getElementById('exportGroupMembersExcelBtn').onclick = function() {
+      const jid = document.getElementById('exportGroupJidExcel').value;
+      if (!jid) return alert('Isi JID grup!');
+      downloadExcel('/export/group-members/excel?jid=' + encodeURIComponent(jid), `group-members-${jid}.xlsx`);
+    };
+
+    // Cache management
+    document.getElementById('checkCacheBtn').onclick = async function() {
+      const cacheResult = document.getElementById('cacheResult');
+      cacheResult.textContent = 'Mengecek cache...';
+      try {
+        const res = await fetch('/cache/media');
+        const data = await res.json();
+        cacheResult.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        cacheResult.textContent = `Error: ${error.message}`;
+      }
+    };
+
+    document.getElementById('cleanupCacheBtn').onclick = async function() {
+      const cacheResult = document.getElementById('cacheResult');
+      cacheResult.textContent = 'Membersihkan cache...';
+      try {
+        const res = await fetch('/cache/cleanup', { method: 'POST' });
+        const data = await res.json();
+        cacheResult.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        cacheResult.textContent = `Error: ${error.message}`;
+      }
+    };
+
+    document.getElementById('getScheduledMessagesBtn').onclick = async function() {
+      const cacheResult = document.getElementById('cacheResult');
+      cacheResult.textContent = 'Mengecek pesan terjadwal...';
+      try {
+        const res = await fetch('/scheduled-messages');
+        const data = await res.json();
+        cacheResult.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        cacheResult.textContent = `Error: ${error.message}`;
+      }
+    };
+
+    // Fungsi untuk mengambil profil kontak
+    async function getProfile() {
+      const profileResult = document.getElementById('profileResult');
+      const number = document.getElementById('profileNumber').value;
+      
+      if (!number) {
+        profileResult.textContent = '❌ Masukkan nomor WhatsApp!';
+        return;
+      }
+      
+      profileResult.textContent = '🔍 Mencari profil...';
+      
+      try {
+        const res = await fetch(`/profile/${number}`);
+        const data = await res.json();
+        
+        if (data.error) {
+          profileResult.textContent = `❌ Error: ${data.error}`;
+          return;
+        }
+        
+        // Format hasil profil
+        let profileText = `👤 PROFIL KONTAK\n`;
+        profileText += `================================\n`;
+        profileText += `📱 Nomor: ${data.number}\n`;
+        profileText += `🆔 JID: ${data.jid}\n`;
+        profileText += `📛 Nama: ${data.name || 'Tidak tersedia'}\n`;
+        profileText += `💬 Status: ${data.status || 'Tidak tersedia'}\n`;
+        profileText += `📅 Last Seen: ${data.lastSeen ? new Date(data.lastSeen * 1000).toLocaleString('id-ID') : 'Tidak tersedia'}\n`;
+        
+        if (data.profilePicture) {
+          profileText += `📸 Foto Profil: ${data.profilePicture}\n`;
+        }
+        
+        if (data.businessProfile) {
+          profileText += `\n🏢 BUSINESS PROFILE\n`;
+          profileText += `================================\n`;
+          profileText += `📛 Nama Bisnis: ${data.businessProfile.name || 'Tidak tersedia'}\n`;
+          profileText += `📝 Deskripsi: ${data.businessProfile.description || 'Tidak tersedia'}\n`;
+          profileText += `📧 Email: ${data.businessProfile.email || 'Tidak tersedia'}\n`;
+          profileText += `🌐 Website: ${data.businessProfile.website || 'Tidak tersedia'}\n`;
+          profileText += `📂 Kategori: ${data.businessProfile.category || 'Tidak tersedia'}\n`;
+          profileText += `📁 Sub-kategori: ${data.businessProfile.subcategory || 'Tidak tersedia'}\n`;
+        }
+        
+        profileResult.textContent = profileText;
+        
+        // Tampilkan foto profil jika ada
+        if (data.profilePicture) {
+          const imgElement = document.createElement('img');
+          imgElement.src = data.profilePicture;
+          imgElement.style.maxWidth = '150px';
+          imgElement.style.marginTop = '10px';
+          imgElement.style.borderRadius = '50%';
+          profileResult.appendChild(imgElement);
+        }
+        
+      } catch (error) {
+        profileResult.textContent = `❌ Error: ${error.message}`;
+      }
+    }
+
+    // Fungsi untuk update profil kontak
+    async function updateProfile() {
+      const profileResult = document.getElementById('profileResult');
+      const number = document.getElementById('profileNumber').value;
+      
+      if (!number) {
+        profileResult.textContent = '❌ Masukkan nomor WhatsApp!';
+        return;
+      }
+      
+      profileResult.textContent = '🔄 Mengupdate profil...';
+      
+      try {
+        const res = await fetch(`/profile/${number}/update`, {
+          method: 'POST'
+        });
+        const data = await res.json();
+        
+        if (data.error) {
+          profileResult.textContent = `❌ Error: ${data.error}`;
+          return;
+        }
+        
+        profileResult.textContent = `✅ Profil berhasil diupdate!\n\n` + JSON.stringify(data, null, 2);
+        
+      } catch (error) {
+        profileResult.textContent = `❌ Error: ${error.message}`;
+      }
+    }
+
+    // Fungsi untuk refresh semua profil kontak
+    async function refreshAllProfiles() {
+      const profileResult = document.getElementById('profileResult');
+      
+      if (!confirm('Yakin ingin refresh profil semua kontak? Ini akan memakan waktu lama.')) {
+        return;
+      }
+      
+      profileResult.textContent = '🔄 Memulai refresh profil semua kontak...\nIni akan memakan waktu lama, mohon tunggu...';
+      
+      try {
+        const res = await fetch('/contacts/refresh-profiles', {
+          method: 'POST'
+        });
+        const data = await res.json();
+        
+        if (data.error) {
+          profileResult.textContent = `❌ Error: ${data.error}`;
+          return;
+        }
+        
+        let resultText = `✅ Refresh profil selesai!\n\n`;
+        resultText += `📊 HASIL:\n`;
+        resultText += `================================\n`;
+        resultText += `📱 Total kontak: ${data.results.total}\n`;
+        resultText += `✅ Berhasil diupdate: ${data.results.updated}\n`;
+        resultText += `❌ Gagal: ${data.results.failed}\n\n`;
+        
+        if (data.results.details.length > 0) {
+          resultText += `📋 DETAIL UPDATE:\n`;
+          resultText += `================================\n`;
+          data.results.details.slice(0, 10).forEach((detail, index) => {
+            resultText += `${index + 1}. ${detail.jid}\n`;
+            resultText += `   Status: ${detail.status}\n`;
+            if (detail.changes) {
+              resultText += `   Changes: ${detail.changes.join(', ')}\n`;
+            }
+            if (detail.error) {
+              resultText += `   Error: ${detail.error}\n`;
+            }
+            resultText += '\n';
+          });
+          
+          if (data.results.details.length > 10) {
+            resultText += `... dan ${data.results.details.length - 10} kontak lainnya\n`;
+          }
+        }
+        
+        profileResult.textContent = resultText;
+        
+      } catch (error) {
+        profileResult.textContent = `❌ Error: ${error.message}`;
+      }
+    }
   </script>
 </body>
 </html>

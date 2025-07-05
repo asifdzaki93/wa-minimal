@@ -1,2 +1,18 @@
-# Ignore WhatsApp session/auth files
+# Baileys store files
+baileys_store.json
+
+# Auth info
 auth_info/
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db

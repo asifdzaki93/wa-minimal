@@ -7,13 +7,16 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.6.0",
+    "@whiskeysockets/baileys": "^6.7.18",
+    "exceljs": "^4.4.0",
     "express": "^4.18.2",
     "mime-types": "^2.1.35",
+    "multer": "^2.0.1",
     "node-fetch": "^3.3.2",
     "pino": "^7.11.0",
     "pino-pretty": "^13.0.0",
-    "qrcode": "^1.5.1"
+    "qrcode": "^1.5.1",
+    "sharp": "^0.32.6"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"
