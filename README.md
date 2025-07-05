@@ -54,6 +54,10 @@ Akses: [http://localhost:3000](http://localhost:3000)
   - Endpoint: `GET /profile/:number/status` (ambil status kontak)
   - Endpoint: `POST /profile/:number/update` (update profil kontak dan simpan ke cache)
   - Endpoint: `POST /contacts/refresh-profiles` (refresh profil semua kontak)
+- **Bulk Message System (Pengiriman Massal):**
+  - Halaman: `/bulk.html` (UI lengkap untuk pengiriman massal)
+  - Fitur: Template pesan, batch processing, delay config, error handling
+  - Keamanan: Randomisasi delay, error rate monitoring, stop on error
 - **Export Kontak, Grup, dan Member Grup:**
 
   - `GET /export/contacts` — Download semua kontak (JSON)
@@ -219,6 +223,58 @@ console.log(refreshResult);
 //     ]
 //   }
 // }
+
+### 5. Contoh: Bulk Message System
+
+**Akses UI Bulk Message:**
+```
+
+http://localhost:3000/bulk.html
+
+```
+
+**Fitur Utama:**
+- **Template Pesan:** Gunakan variabel `{{name}}`, `{{number}}`, `{{time}}`, `{{date}}`, `{{random}}`
+- **Sumber Kontak:** Manual input, file upload, daftar kontak, atau grup tertentu
+- **Batch Processing:** Kirim dalam batch kecil untuk keamanan
+- **Delay Configuration:** Jeda antar pesan dan antar batch
+- **Error Handling:** Stop otomatis jika error rate > 10%
+- **Progress Monitoring:** Real-time progress dan statistik
+- **Export Results:** Download hasil dalam format CSV/JSON
+
+**Konfigurasi Keamanan:**
+- Jeda minimal 5 detik antar pesan
+- Randomisasi delay ±20% untuk pola natural
+- Batch size 5-50 pesan (default: 10)
+- Jeda antar batch 10 detik - 10 menit
+- Monitoring error rate otomatis
+
+**Contoh Template Pesan:**
+```
+
+Halo {{name}}!
+
+Terima kasih telah bergabung dengan kami.
+Waktu pengiriman: {{time}}
+Tanggal: {{date}}
+ID Pesan: {{random}}
+
+Salam,
+Tim Support
+
+```
+
+**Workflow Penggunaan:**
+1. Buka `/bulk.html`
+2. Pastikan WhatsApp terhubung
+3. Pilih sumber kontak (manual/file/contacts/group)
+4. Load kontak
+5. Tulis template pesan dengan variabel
+6. Konfigurasi delay dan batch size
+7. Set waktu mulai (opsional)
+8. Mulai pengiriman massal
+9. Monitor progress real-time
+10. Export hasil setelah selesai
 
 ---
 
